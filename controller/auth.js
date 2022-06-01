@@ -1,22 +1,6 @@
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
-const mysql = require('mysql');
-const util = require('util');
-const connection = mysql.createConnection({
-  host: '34.101.191.226',
-  user: 'root',
-  password: process.env.DB_PASSWORD,
-  database: 'guardian-db',
-});
-
-connection.connect((err) => {
-  if (err) {
-    return console.log(err);
-  }
-  console.log('Connected');
-});
-
-const query = util.promisify(connection.query).bind(connection);
+const query = require('../db/connection');
 
 exports.register = async function (req, res) {
   try {
@@ -53,13 +37,17 @@ exports.login = async function (req, res) {
     const result = await query(
       `SELECT * FROM user WHERE username = '${username}'`
     );
-    // console.log(result);
     if (!result.length)
       return res.status(400).json({ message: 'Failed login' });
     const match = await bcrypt.compare(password, result[0].password);
     if (!match) return res.status(400).json({ message: 'Failed login' });
-    const token = jwt.sign({ username }, 'secret', { expiresIn: '1h' });
-    res.status(200).json({ token });
+    const token = jwt.sign({ username }, process.env.JWT_PASS, { expiresIn: '1h' });
+    res
+      .status(200)
+      .json({
+        message: 'Success Login',
+        data: { userId: result[0].id, token },
+      });
   } catch (error) {
     return error.message;
   }
