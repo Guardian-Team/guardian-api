@@ -43,7 +43,7 @@ exports.register = async function (req, res) {
   } catch (error) {
     res.status(500).send({
       error: {
-        message: 'Server Error',
+        message: error.message,
       },
     });
   }
