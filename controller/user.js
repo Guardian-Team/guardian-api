@@ -1,12 +1,18 @@
-const query = require('../db/connection');
+const { User } = require('../models');
+const fse = require('fs-extra');
 
 exports.getUserById = async function (req, res) {
   try {
     const { id } = req.params;
-    const result = await query(`SELECT * FROM user WHERE id = '${id}'`);
-    return res
-      .status(200)
-      .json({ message: 'Success Request', data: result[0] });
+    const user = await User.findOne({
+      where: {
+        id,
+      },
+      attributes: {
+        exclude: ['createdAt', 'updatedAt'],
+      },
+    });
+    res.status(200).send({ message: 'Response Success', data: user });
   } catch (error) {
     res.status(500).send({
       error: {
@@ -19,18 +25,33 @@ exports.getUserById = async function (req, res) {
 exports.updateUser = async function (req, res) {
   try {
     const { id } = req.params;
-    const data = req.body;
-    const includedId = Object.keys(data).includes('id');
-    if (includedId) return res.status(400).json({ message: 'Invalid Request' });
-
-    const dataUpdated = Object.entries(data)
-      .map((item) => `${item[0]} = '${item[1]}'`)
-      .join(', ');
-    await query(`UPDATE user SET ${dataUpdated} WHERE id = '${id}'`);
-    const result = await query(`SELECT * FROM user WHERE id = '${id}'`);
-    return res
-      .status(200)
-      .json({ message: 'Success Request', data: result[0] });
+    const userExist = await User.findOne({ where: { id } });
+    if (userExist) {
+      const editedData = { ...req.body };
+      const oldAvatar = userExist.avatar;
+      if (req.files) {
+        await fse.remove(`./images/${oldAvatar}`);
+        const newAvatar = req.files.avatar;
+        const newAvatarName = req.files.avatar.name;
+        await newAvatar.mv(`./images/${newAvatarName}`);
+        editedData.avatar = newAvatarName;
+      }
+      await User.update(editedData, { where: { id } });
+      const newDetailUser = await User.findOne({
+        where: {
+          id,
+        },
+        attributes: {
+          exclude: ['createdAt', 'updatedAt'],
+        },
+      });
+      res.status(200).json({
+        message: `Data with id ${id} has been updated`,
+        data: newDetailUser,
+      });
+    } else {
+      res.status(400).send({ message: "Data isn't exist" });
+    }
   } catch (error) {
     res.status(500).send({
       error: {
