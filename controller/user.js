@@ -1,10 +1,21 @@
 const { User } = require('../models');
-const fse = require('fs-extra');
+const bcrypt = require('bcrypt');
+const { Storage } = require('@google-cloud/storage');
+const { format } = require('util');
+const path = require('path');
+// Instantiate a storage client with credentials
+const storage = new Storage({
+  keyFilename:
+    process.env.keyFilename ||
+    path.join(__dirname, '../sacred-armor-346113-862ffb9b3718.json'),
+  projectId: 'sacred-armor-346113',
+});
+const bucket = storage.bucket('ex-bucket-test');
 
 exports.getUserById = async function (req, res) {
   try {
     const { id } = req.params;
-    const user = await User.findOne({
+    const userExist = await User.findOne({
       where: {
         id,
       },
@@ -12,7 +23,14 @@ exports.getUserById = async function (req, res) {
         exclude: ['createdAt', 'updatedAt'],
       },
     });
-    res.status(200).send({ message: 'Response Success', data: user });
+    if (!userExist) {
+      return res.status(400).send({
+        error: {
+          message: "Couldn't find your account",
+        },
+      });
+    }
+    res.status(200).send({ message: 'Response Success', data: userExist });
   } catch (error) {
     res.status(500).send({
       error: {
@@ -29,12 +47,43 @@ exports.updateUser = async function (req, res) {
     if (userExist) {
       const editedData = { ...req.body };
       const oldAvatar = userExist.avatar;
-      if (req.files) {
-        await fse.remove(`./images/${oldAvatar}`);
-        const newAvatar = req.files.avatar;
-        const newAvatarName = req.files.avatar.name;
-        await newAvatar.mv(`./images/${newAvatarName}`);
-        editedData.avatar = newAvatarName;
+      if (req.file) {
+        if (oldAvatar) {
+          try {
+            const fileName = oldAvatar.split('/')[4];
+            await bucket.file(fileName).delete();
+          } catch (error) {
+            return res.status(400).json({ message: error.message });
+          }
+        }
+        const imageUrl = await new Promise((resolve, reject) => {
+          const { originalname, buffer } = req.file;
+          const [imageName, fileType] = originalname.split('.');
+          const timestamp = Date.now();
+
+          const blob = bucket.file(
+            `${imageName.replace(/ /g, '-')}_${timestamp}.${fileType}`
+          );
+          const blobStream = blob.createWriteStream({
+            resumable: false,
+          });
+          blobStream
+            .on('finish', () => {
+              const publicUrl = format(
+                `https://storage.googleapis.com/${bucket.name}/${blob.name}`
+              );
+              resolve(publicUrl);
+            })
+            .on('error', () => {
+              reject(`Unable to upload image, something went wrong`);
+            })
+            .end(buffer);
+        });
+        editedData.avatar = imageUrl;
+      }
+      if (req.body.password) {
+        const hash = await bcrypt.hash(req.body.password, 10);
+        editedData.password = hash;
       }
       await User.update(editedData, { where: { id } });
       const newDetailUser = await User.findOne({
