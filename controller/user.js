@@ -2,12 +2,10 @@ const { User } = require('../models');
 const bcrypt = require('bcrypt');
 const { Storage } = require('@google-cloud/storage');
 const { format } = require('util');
-const path = require('path');
+const joi = require('joi');
 // Instantiate a storage client with credentials
 const storage = new Storage({
-  keyFilename:
-    process.env.keyFilename ||
-    path.join(__dirname, '../sacred-armor-346113-862ffb9b3718.json'),
+  keyFilename: process.env.keyFilename,
   projectId: 'sacred-armor-346113',
 });
 const bucket = storage.bucket('ex-bucket-test');
@@ -47,6 +45,19 @@ exports.updateUser = async function (req, res) {
     if (userExist) {
       const editedData = { ...req.body };
       const oldAvatar = userExist.avatar;
+      const schema = joi.object({
+        name: joi.string().min(3),
+        password: joi.string().min(8),
+        phone: joi.string(),
+      });
+      const { error } = schema.validate(req.body);
+      if (error) {
+        return res.status(400).send({
+          error: {
+            message: error.details[0].message,
+          },
+        });
+      }
       if (req.file) {
         if (oldAvatar) {
           try {
