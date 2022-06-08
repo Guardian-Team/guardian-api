@@ -6,9 +6,9 @@ const joi = require('joi');
 // Instantiate a storage client with credentials
 const storage = new Storage({
   keyFilename: process.env.keyFilename,
-  projectId: 'sacred-armor-346113',
+  projectId: process.env.PROJECT_ID,
 });
-const bucket = storage.bucket('ex-bucket-test');
+const bucket = storage.bucket(process.env.BUCKET_NAME);
 
 exports.getUserById = async function (req, res) {
   try {
